@@ -1,0 +1,2 @@
+INSERT INTO `airports` (`ident`, `type`, `name`, `latitude_deg`, `longitude_deg`, `elevation_ft`, `continent`, `iso_country`, `iso_region`, `municipality`, `scheduled_service`, `gps_code`, `iata_code`, `local_code`, `home_link`, `wikipedia_link`, `keywords`) VALUES
+('LETL', 'small_airport', 'Teruel Airport', 40.41166666, -1.21833333, 3340, 'EU', 'ES', 'ES-AR', 'Aragon', 'no', 'LETL', 'TEV', '', '', '', ''),
