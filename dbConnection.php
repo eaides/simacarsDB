@@ -8,5 +8,5 @@
 
 $dbHost = 'localhost';
 $dbName = 'vam';
-$dbUser = 'root';
+$dbUser = 'homestead';
 $dbPass = 'secret';

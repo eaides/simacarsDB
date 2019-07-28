@@ -16,18 +16,22 @@ class sync_XPLE_dbs
 
     protected $vam_airports = 'airports';
 
-    protected $sqliteDB = 'little_navmap_xp11.sqlite';
+    protected $sqliteDB = './little_navmap_xp11.sqlite';
     protected $sqliteTable = 'airport';
     protected $lite = false;
+
+    protected $sqliteFIX = './FIX_SIM_ACARS.sqlite';
+    protected $sqliteORI = './ORIGINAL_SIM_ACARS.DB3';
+    protected $sqliteSACTable = 'airports';
 
     protected $webExists = array();
     protected $webExistsErrors = array();
     protected $webNotExists = array();
     protected $webNotExistsClosed = array();
 
-    protected $justSpain = false;    // false for all the world, true only spain
-    protected $errorDist = 10;
-    protected $errorAlt = 25;
+    protected $justSpain = false;    // todo false for all the world, true only spain
+    protected $errorDist = 20;
+    protected $errorAlt = 50;
 
     public function __construct ($dbHost='',$dbName='',$dbUser='',$dbPass='')
     {
@@ -39,21 +43,65 @@ class sync_XPLE_dbs
         $bdOK = $this->dbOK();
         if ($bdOK)
         {
-            $conn = mysqli_connect($this->dbHost,$this->dbUser,$this->dbPass,$this->dbName);
+            try {
+                $conn = mysqli_connect($this->dbHost, $this->dbUser, $this->dbPass, $this->dbName);
+            }
+            catch (Exception $e)
+            {
+                $this->echoo('Error: can not connect to mysql DB!');
+                $this->echoo($e->getMessage());
+                die($this->echoo('', false));
+            }
+
             if (!$conn)
             {
-                $this->echoo('Error: can not connect to DB!');
+                $this->echoo('Error: can not connect to mysql DB!');
                 die($this->echoo('', false));
             }
             mysqli_close($conn);
 
-            $db = new SQLite3($this->sqliteDB);
-            if (!$db)
+            try {
+                $db = new SQLite3($this->sqliteDB);
+                if (!$db)
+                {
+                    $this->echoo('Error: can not connect to sqlite DB! '.$this->sqliteDB);
+                    die($this->echoo('', false));
+                }
+            }
+            catch (Exception $e)
             {
-                $this->echoo('Error: can not connect to sqlite DB!');
+                $this->echoo('Error: can not connect to sqlite DB! '.$this->sqliteDB . ' or '.$this->sqliteFIX);
+                $this->echoo($e->getMessage());
                 die($this->echoo('', false));
             }
             $this->lite = $db;
+
+            if (!file_exists($this->sqliteFIX)) {
+                @copy($this->sqliteORI, $this->sqliteFIX);
+            }
+            $dbFix = new SQLite3($this->sqliteFIX);
+            if (!$dbFix)
+            {
+                $this->echoo('Error: can open sqlite '.$this->sqliteFIX);
+                die($this->echoo('', false));
+            }
+            else
+            {
+                $dropTables = array();
+                $tablesquery = $dbFix->query("SELECT name FROM sqlite_master WHERE type='table';");
+                while ($table = $tablesquery->fetchArray(SQLITE3_ASSOC)) {
+                    $table_name = $table['name'];
+                    if ($table_name != $this->sqliteSACTable) {
+                        $dropTables[] = $table_name;
+                    }
+                }
+                foreach($dropTables as$table_name )
+                {
+                    $rdrop = $dbFix->query("DROP TABLE ".$table_name);
+                }
+                $dbFix->query("COMMIT");
+            }
+            $this->liteFix = $dbFix;
         }
     }
 
@@ -197,7 +245,6 @@ class sync_XPLE_dbs
         }
     }
 
-    // todo delete this function after test
     protected function testLite()
     {
         if (!$this->lite) return false;
@@ -211,9 +258,10 @@ class sync_XPLE_dbs
     }
 
     /**
+     * @param bool $useFix
      * @return bool
      */
-    protected function readAirportsFromWeb()
+    protected function readAirportsFromWeb($useFix=false)
     {
         set_time_limit(500);
         $con = $this->getCon();
@@ -234,9 +282,10 @@ class sync_XPLE_dbs
     }
 
     /**
+     * @param bool $useFix
      * @return bool
      */
-    protected function readAirportsFromWebDBWithErrors()
+    protected function readAirportsFromWebDBWithErrors($useFix=false)
     {
         set_time_limit(500);
         $con = $this->getCon();
@@ -262,7 +311,7 @@ class sync_XPLE_dbs
             {
                 continue;
             }
-            $altitude = intval($row['ident']);
+            $altitude = intval($row['elevation_ft']);
             $lonx = floatval($row['longitude_deg']);
             $laty = floatval($row['latitude_deg']);
 
@@ -278,7 +327,7 @@ class sync_XPLE_dbs
                 $alt = $altitude - $altitudeL;
                 $dist = abs($dist);
                 $alt = abs($alt);
-                if ($dist>$this->errorDist || $alt>$this->errorAlt) {
+                if ($dist > $this->errorDist || $alt > $this->errorAlt) {
                     $this->webExistsErrors[$ident] = $rowL;
                     // $this->echoo($ident .': '.$name);
                 }
@@ -288,9 +337,10 @@ class sync_XPLE_dbs
     }
 
     /**
+     * @param bool $useFix
      * @return bool
      */
-    protected function readAirportsFromWebDBNotExists()
+    protected function readAirportsFromWebDBNotExists($useFix=false)
     {
         set_time_limit(500);
         if (!$this->lite) return false;
@@ -353,7 +403,11 @@ class sync_XPLE_dbs
         }
     }
 
-    protected function fixDBVamWeb()
+    /**
+     * @param bool $useFix
+     * @return bool
+     */
+    protected function fixDBVamWeb($useFix=false)
     {
         set_time_limit(500);
         $con = $this->getCon();
@@ -366,42 +420,66 @@ class sync_XPLE_dbs
             return false;
         }
 
-        // backup airports table
-        $qry1 = "
+        if (!$useFix)
+        {
+            // backup airports table
+            $qry1 = "
           CREATE TABLE IF NOT EXISTS {$table_bckp} LIKE {$table};
         ";
-        mysqli_query($con,$qry1);
-        $qry2 = "
-            TRUNCATE {$table_bckp};
+            mysqli_query($con,$qry1);
+
+            $do_backup = true;
+            $qry2 = "
+            SELECT COUNT(*) AS qty FROM {$table_bckp};
         ";
-        mysqli_query($con,$qry2);
-        $qry3 = "
-            INSERT {$table_bckp} SELECT * FROM {$table};
-        ";
-        mysqli_query($con,$qry3);
-        $test = "
-            SELECT count(*) as qty FROM {$table}
-        ";
-        $result = mysqli_query($con,$test);
-        if (!$result) return false;
-        $test_bckp = "
-            SELECT count(*) as qty FROM {$table_bckp}
-        ";
-        $result_bckp = mysqli_query($con,$test_bckp);
-        if (!$result_bckp) return false;
-        $row = $result->fetch_assoc();
-        $row_bckp = $result_bckp->fetch_assoc();
-        if ($row['qty']!=$row_bckp['qty']) return false;
-        //
-        $this->VAMMissing($table);
-        $this->VAMError($table);
+            $result = mysqli_query($con,$qry2);
+            if ($result)
+            {
+                $row = $result->fetch_assoc();
+                if ($row['qty'])
+                {
+                    $do_backup = false;
+                }
+            }
+
+            if ($do_backup)
+            {
+                $qry3 = "
+                INSERT {$table_bckp} SELECT * FROM {$table};
+            ";
+                mysqli_query($con,$qry3);
+                $test = "
+                SELECT count(*) as qty FROM {$table}
+            ";
+                $result = mysqli_query($con,$test);
+                if (!$result) return false;
+                $test_bckp = "
+                SELECT count(*) as qty FROM {$table_bckp}
+            ";
+                $result_bckp = mysqli_query($con,$test_bckp);
+                if (!$result_bckp)
+                {
+                    return false;
+                }
+                $row = $result->fetch_assoc();
+                $row_bckp = $result_bckp->fetch_assoc();
+                if ($row['qty']!=$row_bckp['qty'])
+                {
+                    return false;
+                }
+            }
+        }
+
+        $this->VAMMissing($table, $useFix);
+        $this->VAMError($table, $useFix);
     }
 
     /**
      * @param $table
+     * @param $useFix
      * @return bool
      */
-    protected function VAMMissing($table)
+    protected function VAMMissing($table, $useFix)
     {
         set_time_limit(500);
         $con = $this->getCon();
@@ -458,9 +536,10 @@ class sync_XPLE_dbs
 
     /**
      * @param $table
+     * @param $useFix
      * @return bool
      */
-    protected function VAMError($table)
+    protected function VAMError($table, $useFix)
     {
         set_time_limit(500);
         $con = $this->getCon();
@@ -506,19 +585,32 @@ class sync_XPLE_dbs
         $this->readAirportsFromWebDBWithErrors();
         $this->readAirportsFromWebDBNotExists();
 
+        $this->echoo('VAM DB Web');
         $this->echoo('Airports with errors: '.count($this->webExistsErrors).' of '.count($this->webExists));
         $this->echoo('Missing Airports: '.count($this->webNotExists).' of '.count($this->webExists));
         $this->echoo('Missing Airports (closed): '.count($this->webNotExistsClosed).' of '.count($this->webExists));
         $this->echoo('Fixing... ');
-
         $this->fixDBVamWeb();
 
-//        var_dump($this->webExistsErrors);
-//        var_dump($this->webNotExists);
+        $this->echoo('');
+        $this->echoo('');
+
+        $this->readAirportsFromWeb(true);   // todo
+        $this->readAirportsFromWebDBWithErrors(true);   // todo
+        $this->readAirportsFromWebDBNotExists(true);    // todo
+
+        $this->echoo('FIX sqlite');
+        $this->echoo('Airports with errors: '.count($this->webExistsErrors).' of '.count($this->webExists));
+        $this->echoo('Missing Airports: '.count($this->webNotExists).' of '.count($this->webExists));
+        $this->echoo('Missing Airports (closed): '.count($this->webNotExistsClosed).' of '.count($this->webExists));
+        $this->echoo('Fixing... ');
+        $this->fixDBVamWeb(true);   // todo
+
+        $this->echoo('');
+        $this->echoo('');
 
         $this->echoo('Sync Finished OK!');
-        die();
+        return 0;
 
     }
-
 }
