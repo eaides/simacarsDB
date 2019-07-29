@@ -20,20 +20,21 @@ class sync_XPLE_dbs
     protected $sqliteTable = 'airport';
     protected $lite = false;
 
-    protected $sqliteFIX = './FIX_SIM_ACARS.sqlite';
+    protected $sqliteFIX = './FIX_SIM_ACARS.DB3';
     protected $sqliteORI = './ORIGINAL_SIM_ACARS.DB3';
     protected $sqliteSACTable = 'airports';
+    protected $liteFix = false;
 
     protected $webExists = array();
     protected $webExistsErrors = array();
     protected $webNotExists = array();
     protected $webNotExistsClosed = array();
 
-    protected $justSpain = false;    // todo false for all the world, true only spain
+    protected $justSpain = false;    // false for all the world, true only spain
     protected $errorDist = 20;
     protected $errorAlt = 50;
 
-    public function __construct ($dbHost='',$dbName='',$dbUser='',$dbPass='')
+    public function __construct($dbHost = '', $dbName = '', $dbUser = '', $dbPass = '')
     {
         set_time_limit(500);
         $this->dbHost = $dbHost;
@@ -41,20 +42,16 @@ class sync_XPLE_dbs
         $this->dbUser = $dbUser;
         $this->dbPass = $dbPass;
         $bdOK = $this->dbOK();
-        if ($bdOK)
-        {
+        if ($bdOK) {
             try {
                 $conn = mysqli_connect($this->dbHost, $this->dbUser, $this->dbPass, $this->dbName);
-            }
-            catch (Exception $e)
-            {
+            } catch (Exception $e) {
                 $this->echoo('Error: can not connect to mysql DB!');
                 $this->echoo($e->getMessage());
                 die($this->echoo('', false));
             }
 
-            if (!$conn)
-            {
+            if (!$conn) {
                 $this->echoo('Error: can not connect to mysql DB!');
                 die($this->echoo('', false));
             }
@@ -62,15 +59,12 @@ class sync_XPLE_dbs
 
             try {
                 $db = new SQLite3($this->sqliteDB);
-                if (!$db)
-                {
-                    $this->echoo('Error: can not connect to sqlite DB! '.$this->sqliteDB);
+                if (!$db) {
+                    $this->echoo('Error: can not connect to sqlite DB! ' . $this->sqliteDB);
                     die($this->echoo('', false));
                 }
-            }
-            catch (Exception $e)
-            {
-                $this->echoo('Error: can not connect to sqlite DB! '.$this->sqliteDB . ' or '.$this->sqliteFIX);
+            } catch (Exception $e) {
+                $this->echoo('Error: can not connect to sqlite DB! ' . $this->sqliteDB . ' or ' . $this->sqliteFIX);
                 $this->echoo($e->getMessage());
                 die($this->echoo('', false));
             }
@@ -80,26 +74,21 @@ class sync_XPLE_dbs
                 @copy($this->sqliteORI, $this->sqliteFIX);
             }
             $dbFix = new SQLite3($this->sqliteFIX);
-            if (!$dbFix)
-            {
-                $this->echoo('Error: can open sqlite '.$this->sqliteFIX);
+            if (!$dbFix) {
+                $this->echoo('Error: can open sqlite ' . $this->sqliteFIX);
                 die($this->echoo('', false));
-            }
-            else
-            {
+            } else {
                 $dropTables = array();
-                $tablesquery = $dbFix->query("SELECT name FROM sqlite_master WHERE type='table';");
-                while ($table = $tablesquery->fetchArray(SQLITE3_ASSOC)) {
+                $tables_query = $dbFix->query("SELECT name FROM sqlite_master WHERE type='table';");
+                while ($table = $tables_query->fetchArray(SQLITE3_ASSOC)) {
                     $table_name = $table['name'];
                     if ($table_name != $this->sqliteSACTable) {
                         $dropTables[] = $table_name;
                     }
                 }
-                foreach($dropTables as$table_name )
-                {
-                    $rdrop = $dbFix->query("DROP TABLE ".$table_name);
+                foreach ($dropTables as $table_name) {
+                    $dbFix->query("DROP TABLE " . $table_name);
                 }
-                $dbFix->query("COMMIT");
             }
             $this->liteFix = $dbFix;
         }
@@ -111,9 +100,8 @@ class sync_XPLE_dbs
     protected function getCon()
     {
         set_time_limit(500);
-        $conn = mysqli_connect($this->dbHost,$this->dbUser,$this->dbPass,$this->dbName);
-        if (!$conn)
-        {
+        $conn = mysqli_connect($this->dbHost, $this->dbUser, $this->dbPass, $this->dbName);
+        if (!$conn) {
             $this->echoo('Error: can not connect to DB!');
             die($this->echoo('', false));
         }
@@ -136,8 +124,7 @@ class sync_XPLE_dbs
     {
         set_time_limit(500);
         $nl = '<br>';
-        if ($this->is_cli())
-        {
+        if ($this->is_cli()) {
             $nl = "\n";
         }
         return $nl;
@@ -148,13 +135,12 @@ class sync_XPLE_dbs
      * @param bool $doEcho
      * @return string
      */
-    protected function echoo($msg, $doEcho=true)
+    protected function echoo($msg, $doEcho = true)
     {
         set_time_limit(500);
         $nl = $this->getNL();
         $msg = $msg . $nl;
-        if ($doEcho)
-        {
+        if ($doEcho) {
             echo $msg;
         }
         return $msg;
@@ -175,8 +161,7 @@ class sync_XPLE_dbs
     protected function dbOK()
     {
         set_time_limit(500);
-        if (empty($this->dbHost) || empty($this->dbName) || empty($this->dbUser) || empty($this->dbPass) || empty($this->vam_airports))
-        {
+        if (empty($this->dbHost) || empty($this->dbName) || empty($this->dbUser) || empty($this->dbPass) || empty($this->vam_airports)) {
             $this->echoo('Error: No DB connection defined!');
             die($this->echoo('', false));
         }
@@ -195,18 +180,20 @@ class sync_XPLE_dbs
             SHOW INDEXES FROM {$table} WHERE Key_name = 'PRIMARY'
         ";
 
-        mysqli_query($con,$qry);
+        mysqli_query($con, $qry);
         $rows = mysqli_affected_rows($con);
-        if ($rows == 0)
-        {
+        if ($rows == 0) {
             $qry = "
               ALTER TABLE `{$table}` ADD PRIMARY KEY (`id`) USING BTREE;
             ";
-            mysqli_query($con,$qry);
+            mysqli_query($con, $qry);
         }
         return true;
     }
 
+    /**
+     * @return bool
+     */
     protected function makeIdentUnique()
     {
         set_time_limit(500);
@@ -217,34 +204,34 @@ class sync_XPLE_dbs
         $qry_count = "
           SELECT `ident`, COUNT(*) AS qty FROM `{$table}` GROUP BY `ident` having qty > 1
         ";
-        mysqli_query($con,$qry_count);
+        mysqli_query($con, $qry_count);
         $rows = mysqli_affected_rows($con);
-        if ($rows <= 0)
-        {
+        if ($rows <= 0) {
             $qry = "
                 SHOW INDEXES FROM {$table} WHERE Key_name = 'ident'
             ";
-            mysqli_query($con,$qry);
+            mysqli_query($con, $qry);
             $rows = mysqli_affected_rows($con);
-            if ($rows == 0)
-            {
+            if ($rows == 0) {
                 // not exists index for column `ident`
                 $qry = "
                   ALTER TABLE `{$table}` ADD UNIQUE `ident` (`ident`) USING BTREE;
                 ";
-                mysqli_query($con,$qry);
-            }
-            else
-            {
+                mysqli_query($con, $qry);
+            } else {
                 // already exists index for column `ident`, ensure that is unique
                 $qry = "
                   ALTER TABLE `{$table}` DROP INDEX `ident`, ADD UNIQUE `ident` (`ident`) USING BTREE;
                 ";
-                mysqli_query($con,$qry);
+                mysqli_query($con, $qry);
             }
         }
+        return true;
     }
 
+    /**
+     * @return bool
+     */
     protected function testLite()
     {
         if (!$this->lite) return false;
@@ -253,15 +240,15 @@ class sync_XPLE_dbs
 
         $results = $db->query("SELECT ident, `name`, country FROM {$table} WHERE country='spain'");
         while ($row = $results->fetchArray()) {
-            $this->echoo($row[0]. ': ' .$row[1]. ' - ' .$row[2]);
+            $this->echoo($row[0] . ': ' . $row[1] . ' - ' . $row[2]);
         }
+        return true;
     }
 
     /**
-     * @param bool $useFix
      * @return bool
      */
-    protected function readAirportsFromWeb($useFix=false)
+    protected function readAirportsFromWeb()
     {
         set_time_limit(500);
         $con = $this->getCon();
@@ -271,21 +258,42 @@ class sync_XPLE_dbs
         $qr = "
           SELECT `ident` FROM `{$table}`
         ";
-        $result = mysqli_query($con,$qr);
+        $result = mysqli_query($con, $qr);
         if (!$result) return false;
 
-        while ($row = $result->fetch_assoc())
-        {
+        while ($row = $result->fetch_assoc()) {
             $ident = strtoupper($row['ident']);
             $this->webExists[$ident] = $ident;
         }
+        return true;
     }
 
     /**
-     * @param bool $useFix
      * @return bool
      */
-    protected function readAirportsFromWebDBWithErrors($useFix=false)
+    protected function readAirportsFromLite()
+    {
+        set_time_limit(500);
+        $con = $this->liteFix;
+        if (!$con) return false;
+        $table = $this->sqliteSACTable;
+
+        $qr = "
+          SELECT `ident` FROM `{$table}`
+        ";
+        $result = $con->query($qr);
+        if (!$result) return false;
+        while ($row = $result->fetchArray()) {
+            $ident = strtoupper($row['ident']);
+            $this->webExists[$ident] = $ident;
+        }
+        return true;
+    }
+
+    /**
+     * @return bool
+     */
+    protected function readAirportsFromWebDBWithErrors()
     {
         set_time_limit(500);
         $con = $this->getCon();
@@ -299,37 +307,36 @@ class sync_XPLE_dbs
         $qr = "
           SELECT * FROM `{$table}`
         ";
-        $result = mysqli_query($con,$qr);
+        $result = mysqli_query($con, $qr);
         if (!$result) return false;
 
-        while ($row = $result->fetch_assoc())
-        {
+        while ($row = $result->fetch_assoc()) {
             $ident = strtoupper($row['ident']);
-            $name =  $row['name'];
+            $ident2 = substr($ident, 0, 2);
             $country = trim($row['iso_country']);
-            if ($this->justSpain && strtolower($country)!='es')
-            {
+            if ($ident == 'LEGO') continue;
+            if ($this->justSpain && strtolower($country) != 'es' && $ident2 != 'LE') {
                 continue;
             }
             $altitude = intval($row['elevation_ft']);
             $lonx = floatval($row['longitude_deg']);
             $laty = floatval($row['latitude_deg']);
 
-            // $this->echoo($row['ident'].': '.$row['name']);
             // read from lite
             $resultLite = $db->query("SELECT * FROM {$tableLite} WHERE `ident`=\"{$ident}\" LIMIT 1");
             if ($resultLite)
-            while ($rowL = $resultLite->fetchArray()) {
-                $altitudeL = intval($rowL['altitude']);
-                $lonxL = floatval($rowL['lonx']);
-                $latyL = floatval($rowL['laty']);
-                $dist = $this->distance($laty,$lonx,$latyL,$lonxL);
-                $alt = $altitude - $altitudeL;
-                $dist = abs($dist);
-                $alt = abs($alt);
-                if ($dist > $this->errorDist || $alt > $this->errorAlt) {
-                    $this->webExistsErrors[$ident] = $rowL;
-                    // $this->echoo($ident .': '.$name);
+            {
+                while ($rowL = $resultLite->fetchArray()) {
+                    $altitudeL = intval($rowL['altitude']);
+                    $lonxL = floatval($rowL['lonx']);
+                    $latyL = floatval($rowL['laty']);
+                    $dist = $this->distance($laty, $lonx, $latyL, $lonxL);
+                    $alt = $altitude - $altitudeL;
+                    $dist = abs($dist);
+                    $alt = abs($alt);
+                    if ($dist > $this->errorDist || $alt > $this->errorAlt) {
+                        $this->webExistsErrors[$ident] = $rowL;
+                    }
                 }
             }
         }
@@ -337,10 +344,63 @@ class sync_XPLE_dbs
     }
 
     /**
-     * @param bool $useFix
      * @return bool
      */
-    protected function readAirportsFromWebDBNotExists($useFix=false)
+    protected function readAirportsFromLiteDBWithErrors()
+    {
+        set_time_limit(500);
+        $con = $this->liteFix;
+        if (!$con) return false;
+        $table = $this->sqliteSACTable;
+
+        if (!$this->lite) return false;
+        $db = $this->lite;
+        $tableLite = $this->sqliteTable;
+
+        $qr = "
+          SELECT * FROM `{$table}`
+        ";
+
+        $result = $con->query($qr);
+        if (!$result) return false;
+        while ($row = $result->fetchArray()) {
+            $ident = strtoupper($row['ident']);
+            $ident2 = substr($ident, 0, 2);
+            $country = trim($row['iso_country']);
+            if ($ident == 'LEGO') continue;
+            if ($this->justSpain && strtolower($country) != 'es' && $ident2 != 'LE') {
+                continue;
+            }
+            $altitude = intval($row['elevation_ft']);
+            $lonx = floatval($row['longitude_deg']);
+            $laty = floatval($row['latitude_deg']);
+
+            // read from lite
+            $resultLite = $db->query("SELECT * FROM {$tableLite} WHERE `ident`=\"{$ident}\" LIMIT 1");
+            if ($resultLite)
+            {
+                while ($rowL = $resultLite->fetchArray()) {
+                    $altitudeL = intval($rowL['altitude']);
+                    $lonxL = floatval($rowL['lonx']);
+                    $latyL = floatval($rowL['laty']);
+                    $dist = $this->distance($laty, $lonx, $latyL, $lonxL);
+                    $alt = $altitude - $altitudeL;
+                    $dist = abs($dist);
+                    $alt = abs($alt);
+                    if ($dist > $this->errorDist || $alt > $this->errorAlt) {
+                        $this->webExistsErrors[$ident] = $rowL;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * @brief: this is the same for web and lite: just compare arrays
+     * @return bool
+     */
+    protected function readAirportsDBNotExists()
     {
         set_time_limit(500);
         if (!$this->lite) return false;
@@ -348,26 +408,22 @@ class sync_XPLE_dbs
         $tableLite = $this->sqliteTable;
 
         $resultLite = $db->query("SELECT * FROM {$tableLite}");
-        if ($resultLite)
-        {
+        if ($resultLite) {
             while ($rowL = $resultLite->fetchArray()) {
                 $country = trim($rowL['country']);
-                if ($this->justSpain && strtolower($country)!='spain')
-                {
+                $ident = strtoupper($rowL['ident']);
+                $ident2 = substr($ident, 0, 2);
+                if ($ident == 'LEGO') continue;
+                if ($this->justSpain && strtolower($country) != 'spain' && $ident2 != 'LE') {
                     continue;
                 }
-                $ident = strtoupper($rowL['ident']);
                 $is_closed = $rowL['is_closed'];
                 if (!array_key_exists($ident, $this->webExists)) {
-                    if (intval($is_closed)==1)
-                    {
+                    if (intval($is_closed) == 1) {
                         $this->webNotExistsClosed[$ident] = $rowL;
-                    }
-                    else
-                    {
+                    } else {
                         $this->webNotExists[$ident] = $rowL;
                     }
-                    // $this->echoo($ident .': '.$rowL[3]);
                 }
             }
         }
@@ -382,32 +438,31 @@ class sync_XPLE_dbs
      * @param string $unit
      * @return float|int
      */
-    protected function distance($lat1, $lon1, $lat2, $lon2, $unit='M') {
+    protected function distance($lat1, $lon1, $lat2, $lon2, $unit = 'M')
+    {
         if (($lat1 == $lat2) && ($lon1 == $lon2)) {
             return 0;
-        }
-        else {
+        } else {
             $theta = $lon1 - $lon2;
-            $dist = sin(deg2rad($lat1)) * sin(deg2rad($lat2)) +  cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * cos(deg2rad($theta));
+            $dist = sin(deg2rad($lat1)) * sin(deg2rad($lat2)) + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * cos(deg2rad($theta));
             $dist = acos($dist);
             $dist = rad2deg($dist);
             $miles = $dist * 60 * 1.1515;
             $unit = strtoupper($unit);
             if ($unit == "K") {
-                return ($miles * 1.609344);
+                return abs($miles * 1.609344);
             } else if ($unit == "N") {
-                return ($miles * 0.8684);
+                return abs($miles * 0.8684);
             } else {
-                return $miles;
+                return abs($miles);
             }
         }
     }
 
     /**
-     * @param bool $useFix
      * @return bool
      */
-    protected function fixDBVamWeb($useFix=false)
+    protected function fixDBVamWeb()
     {
         set_time_limit(500);
         $con = $this->getCon();
@@ -415,100 +470,131 @@ class sync_XPLE_dbs
         $table = $this->vam_airports;
         $table_bckp = $this->vam_airports . '_bckp';
 
-        if (count($this->webExistsErrors)+count($this->webNotExists)+count($this->webNotExistsClosed)==0)
-        {
+        if (count($this->webExistsErrors) + count($this->webNotExists) + count($this->webNotExistsClosed) == 0) {
             return false;
         }
 
-        if (!$useFix)
-        {
-            // backup airports table
-            $qry1 = "
+        // backup airports table
+        $qry1 = "
           CREATE TABLE IF NOT EXISTS {$table_bckp} LIKE {$table};
         ";
-            mysqli_query($con,$qry1);
+        mysqli_query($con, $qry1);
 
-            $do_backup = true;
-            $qry2 = "
+        $do_backup = true;
+        $qry2 = "
             SELECT COUNT(*) AS qty FROM {$table_bckp};
         ";
-            $result = mysqli_query($con,$qry2);
-            if ($result)
-            {
-                $row = $result->fetch_assoc();
-                if ($row['qty'])
-                {
-                    $do_backup = false;
-                }
-            }
-
-            if ($do_backup)
-            {
-                $qry3 = "
-                INSERT {$table_bckp} SELECT * FROM {$table};
-            ";
-                mysqli_query($con,$qry3);
-                $test = "
-                SELECT count(*) as qty FROM {$table}
-            ";
-                $result = mysqli_query($con,$test);
-                if (!$result) return false;
-                $test_bckp = "
-                SELECT count(*) as qty FROM {$table_bckp}
-            ";
-                $result_bckp = mysqli_query($con,$test_bckp);
-                if (!$result_bckp)
-                {
-                    return false;
-                }
-                $row = $result->fetch_assoc();
-                $row_bckp = $result_bckp->fetch_assoc();
-                if ($row['qty']!=$row_bckp['qty'])
-                {
-                    return false;
-                }
+        $result = mysqli_query($con, $qry2);
+        if ($result) {
+            $row = $result->fetch_assoc();
+            if ($row['qty']) {
+                $do_backup = false;
             }
         }
 
-        $this->VAMMissing($table, $useFix);
-        $this->VAMError($table, $useFix);
+        if ($do_backup) {
+            $qry3 = "
+                INSERT {$table_bckp} SELECT * FROM {$table};
+            ";
+            mysqli_query($con, $qry3);
+            $test = "
+                SELECT count(*) as qty FROM {$table}
+            ";
+            $result = mysqli_query($con, $test);
+            if (!$result) return false;
+            $test_bckp = "
+                SELECT count(*) as qty FROM {$table_bckp}
+            ";
+            $result_bckp = mysqli_query($con, $test_bckp);
+            if (!$result_bckp) {
+                return false;
+            }
+            $row = $result->fetch_assoc();
+            $row_bckp = $result_bckp->fetch_assoc();
+            if ($row['qty'] != $row_bckp['qty']) {
+                return false;
+            }
+        }
+
+        $rc1 = $this->fixVAMMissing($table, $con, false);
+        $rc2 = $this->fixVAMError($table, $con, false);
+
+        return $rc1 && $rc2;
+    }
+
+    /**
+     * @return bool
+     */
+    protected function fixDBVamLite()
+    {
+        set_time_limit(500);
+        $con = $this->liteFix;
+        if (!$con) return false;
+        $table = $this->sqliteSACTable;
+
+        if (count($this->webExistsErrors) + count($this->webNotExists) + count($this->webNotExistsClosed) == 0) {
+            return false;
+        }
+
+        $rc1 = $this->fixVAMMissing($table, $con, true);
+        $rc2 = $this->fixVAMError($table, $con, true);
+
+        return $rc1 && $rc2;
     }
 
     /**
      * @param $table
-     * @param $useFix
+     * @param $con
+     * @param bool $lite
      * @return bool
      */
-    protected function VAMMissing($table, $useFix)
+    protected function fixVAMMissing($table, $con, $lite=false)
     {
         set_time_limit(500);
-        $con = $this->getCon();
         if (!$con) return false;
 
-        if (count($this->webNotExists)+count($this->webNotExistsClosed)==0)
-        {
+        if (count($this->webNotExists) + count($this->webNotExistsClosed) == 0) {
             return false;
         }
 
+        $themax = 0;
         $qry = "
           SELECT MAX(id) themax FROM {$table}
         ";
-        $result = mysqli_query($con, $qry);
-        if (!$result) return false;
-        $row = $result->fetch_assoc();
-        $themax = $row['themax'];
-
-        $nonExists = array_merge($this->webNotExists,$this->webNotExistsClosed);
-        foreach($nonExists as $ident => $data)
+        $ignore = '';
+        if ($lite) {
+            $resultLite = $con->query($qry);
+            if ($resultLite)
+            {
+                while ($rowL = $resultLite->fetchArray()) {
+                    $themax = $rowL['themax'];
+                    break;
+                }
+            }
+        }
+        else
         {
+            $ignore = 'IGNORE';
+            $result = mysqli_query($con, $qry);
+            if (!$result) return false;
+            while($row = $result->fetch_assoc())
+            {
+                $themax = $row['themax'];
+                break;
+            }
+        }
+
+        $nonExists = array_merge($this->webNotExists, $this->webNotExistsClosed);
+        foreach ($nonExists as $ident => $data) {
             $themax++;
-            if ($data['rating']==1) $type='small_airport';
-            if ($data['rating']==2) $type='small_airport';
-            if ($data['rating']==3) $type='small_airport';
-            if ($data['rating']==4) $type='medium_airport';
-            if ($data['rating']==5) $type='large_airport';
+            $type = 'small_airport';
+            if ($data['rating'] == 1) $type = 'small_airport';
+            if ($data['rating'] == 2) $type = 'small_airport';
+            if ($data['rating'] == 3) $type = 'small_airport';
+            if ($data['rating'] == 4) $type = 'medium_airport';
+            if ($data['rating'] == 5) $type = 'large_airport';
             $qry = "
-                INSERT IGNORE INTO `{$table}` 
+                INSERT {$ignore} INTO `{$table}` 
                 (`id`, `ident`, 
                  `type`, `name`, 
                  `latitude_deg`, `longitude_deg`, `elevation_ft`,
@@ -525,9 +611,16 @@ class sync_XPLE_dbs
                  \"\", \"\", \"\", 
                  \"\", \"\");
             ";
-            $res = mysqli_query($con, $qry);
-            if (!$res)
+            $res = false;
+            if ($lite)
             {
+                $res = $con->query($qry);
+            }
+            else
+            {
+                $res = mysqli_query($con, $qry);
+            }
+            if (!$res) {
                 $themax--;
             }
         }
@@ -536,24 +629,22 @@ class sync_XPLE_dbs
 
     /**
      * @param $table
-     * @param $useFix
+     * @param $con
+     * @param bool $lite
      * @return bool
      */
-    protected function VAMError($table, $useFix)
+    protected function fixVAMError($table, $con, $lite=false)
     {
         set_time_limit(500);
-        $con = $this->getCon();
         if (!$con) return false;
 
-        if (count($this->webExistsErrors)==0)
-        {
+        if (count($this->webExistsErrors) == 0) {
             return false;
         }
 
         $withErrors = $this->webExistsErrors;
-        foreach($withErrors as $ident => $data)
-        {
-            $ident6 = substr($ident,0,6);
+        foreach ($withErrors as $ident => $data) {
+            $ident6 = substr($ident, 0, 6);
             $qry = "
               UPDATE `{$table}` SET 
                 `name` = \"{$data['name']}\",
@@ -563,12 +654,14 @@ class sync_XPLE_dbs
                 `elevation_ft` = {$data['altitude']}
                 WHERE `airports`.`ident` = \"{$data['ident']}\";
             ";
-            $res = mysqli_query($con, $qry);
-//            if (!$res)
-//            {
-//                $this->echoo(mysqli_error($con));
-//                $this->echoo($qry);
-//            }
+            if ($lite)
+            {
+                $con->query($qry);
+            }
+            else
+            {
+                mysqli_query($con, $qry);
+            }
         }
         return true;
     }
@@ -583,28 +676,37 @@ class sync_XPLE_dbs
 
         $this->readAirportsFromWeb();
         $this->readAirportsFromWebDBWithErrors();
-        $this->readAirportsFromWebDBNotExists();
+        $this->readAirportsDBNotExists();
 
-        $this->echoo('VAM DB Web');
-        $this->echoo('Airports with errors: '.count($this->webExistsErrors).' of '.count($this->webExists));
-        $this->echoo('Missing Airports: '.count($this->webNotExists).' of '.count($this->webExists));
-        $this->echoo('Missing Airports (closed): '.count($this->webNotExistsClosed).' of '.count($this->webExists));
-        $this->echoo('Fixing... ');
-        $this->fixDBVamWeb();
+        $this->echoo('VAM DB Web:');
+        $this->echoo('Airports with errors: ' . count($this->webExistsErrors) . ' of ' . count($this->webExists));
+        $this->echoo('Missing Airports: ' . count($this->webNotExists) . ' of ' . count($this->webExists));
+        $this->echoo('Missing Airports (closed): ' . count($this->webNotExistsClosed) . ' of ' . count($this->webExists));
+        echo('Fixing... ');
+        $fixed = $this->fixDBVamWeb();
+        if ($fixed) $this->echoo('Done!');
+            else  $this->echoo('Not fixed needed ');
 
         $this->echoo('');
         $this->echoo('');
 
-        $this->readAirportsFromWeb(true);   // todo
-        $this->readAirportsFromWebDBWithErrors(true);   // todo
-        $this->readAirportsFromWebDBNotExists(true);    // todo
+        $this->webExists = array();
+        $this->webExistsErrors = array();
+        $this->webNotExists = array();
+        $this->webNotExistsClosed = array();
 
-        $this->echoo('FIX sqlite');
-        $this->echoo('Airports with errors: '.count($this->webExistsErrors).' of '.count($this->webExists));
-        $this->echoo('Missing Airports: '.count($this->webNotExists).' of '.count($this->webExists));
-        $this->echoo('Missing Airports (closed): '.count($this->webNotExistsClosed).' of '.count($this->webExists));
-        $this->echoo('Fixing... ');
-        $this->fixDBVamWeb(true);   // todo
+        $this->readAirportsFromLite();
+        $this->readAirportsFromLiteDBWithErrors();
+        $this->readAirportsDBNotExists();
+
+        $this->echoo('FIX sqlite:');
+        $this->echoo('Airports with errors: ' . count($this->webExistsErrors) . ' of ' . count($this->webExists));
+        $this->echoo('Missing Airports: ' . count($this->webNotExists) . ' of ' . count($this->webExists));
+        $this->echoo('Missing Airports (closed): ' . count($this->webNotExistsClosed) . ' of ' . count($this->webExists));
+        echo('Fixing... ');
+        $fixed = $this->fixDBVamLite();
+        if ($fixed) $this->echoo('Done!');
+        else  $this->echoo('Not fixed needed ');
 
         $this->echoo('');
         $this->echoo('');
